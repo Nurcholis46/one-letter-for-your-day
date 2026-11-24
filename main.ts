@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
 // One letter for your day: U — for "unhinged".
 //
@@ -39,7 +39,23 @@ if (!/^[A-Z]$/.test(letter)) {
   throw new Error(`entry must be exactly one letter A-Z, got ${JSON.stringify(letter)}`);
 }
 
+// Harden /output creation: mkdirSync with recursive:true silently succeeds
+// even if /output exists as a regular file, and then the write below would
+// fail with a confusing ENOTDIR. Refuse early with a clear error instead.
+if (existsSync("/output") && !statSync("/output").isDirectory()) {
+  throw new Error("/output exists but is not a directory");
+}
 mkdirSync("/output", { recursive: true });
 writeFileSync("/output/entry.txt", letter, "utf8");
 // The grader collects /output as another user: leave the file world-readable.
 chmodSync("/output/entry.txt", 0o644);
+
+// Read back and assert the exact contract the gate requires: exactly one
+// byte, equal to the letter. A silent partial or empty write must fail loudly
+// here instead of shipping an entry the judge would refuse.
+const written = readFileSync("/output/entry.txt");
+if (written.length !== 1 || written[0] !== letter.charCodeAt(0)) {
+  throw new Error(
+    `/output/entry.txt must be exactly 1 byte ${letter.charCodeAt(0)}, got ${written.length} bytes`
+  );
+}
